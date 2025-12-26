@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Truck, Store, MapPin, CreditCard, Banknote, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Truck, MapPin, CreditCard, Banknote, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ const Checkout = () => {
   const navigate = useNavigate();
   const { items, subtotal, total, discount, deliveryFee, clearCart } = useCart();
   const { t, isRTL } = useLanguage();
-  const { orderType, selectedBranch, deliveryAddress, setDeliveryAddress } = useOrder();
+  const { deliveryAddress } = useOrder();
   const { customer, isAuthenticated } = useCustomerAuth();
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -68,7 +68,7 @@ const Checkout = () => {
       return;
     }
 
-    if (orderType === 'delivery' && (!formData.area || !formData.block || !formData.building)) {
+    if (!formData.area || !formData.block || !formData.building) {
       toast.error(isRTL ? 'يرجى إدخال عنوان التوصيل' : 'Please enter delivery address');
       return;
     }
@@ -85,7 +85,7 @@ const Checkout = () => {
       const orderNumber = generateOrderNumber();
       
       // Build delivery address object
-      const addressObj = orderType === 'delivery' ? {
+      const addressObj = {
         area: formData.area,
         block: formData.block,
         street: formData.street,
@@ -93,7 +93,7 @@ const Checkout = () => {
         floor: formData.floor,
         apartment: formData.apartment,
         additional_directions: formData.additionalInfo,
-      } : null;
+      };
 
       // Build order items
       const orderItems = items.map(item => ({
@@ -119,7 +119,7 @@ const Checkout = () => {
           branch_id: BRANCH_ID,
           customer_id: customer?.id || null,
           order_number: orderNumber,
-          order_type: orderType,
+          order_type: 'delivery',
           status: 'pending',
           customer_name: `${formData.firstName} ${formData.lastName}`.trim(),
           customer_phone: formData.phone,
@@ -132,9 +132,7 @@ const Checkout = () => {
           tax: 0, // Kuwait has no food tax
           service_charge: 0,
           total,
-          payment_method: paymentMethod === 'cash' 
-            ? (orderType === 'delivery' ? 'cash_on_delivery' : 'cash_on_pickup')
-            : 'online',
+          payment_method: paymentMethod === 'cash' ? 'cash_on_delivery' : 'online',
           payment_status: paymentMethod === 'cash' ? 'pending' : 'pending',
           notes: formData.notes || null,
         })
@@ -211,29 +209,20 @@ const Checkout = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Checkout Form */}
               <div className="lg:col-span-2 space-y-6">
-                {/* Order Type Display */}
+                {/* Delivery Info */}
                 <Card>
                   <CardHeader>
                     <CardTitle className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      {orderType === 'delivery' ? <Truck className="h-5 w-5" /> : <Store className="h-5 w-5" />}
-                      {t.checkout.deliveryMethod}
+                      <Truck className="h-5 w-5" />
+                      {isRTL ? 'توصيل للمنزل' : 'Home Delivery'}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className={`flex items-center gap-3 p-4 bg-primary/5 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      {orderType === 'delivery' ? (
-                        <Truck className="h-6 w-6 text-primary" />
-                      ) : (
-                        <Store className="h-6 w-6 text-primary" />
-                      )}
-                      <div className={isRTL ? 'text-right' : ''}>
-                        <p className="font-medium">
-                          {orderType === 'delivery' ? t.orderType.delivery : t.orderType.pickup}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {isRTL ? selectedBranch?.name_ar : selectedBranch?.name}
-                        </p>
-                      </div>
+                      <Truck className="h-6 w-6 text-primary" />
+                      <p className="font-medium">
+                        {isRTL ? 'سنوصل طلبك إلى باب منزلك' : "We'll deliver your order to your doorstep"}
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
@@ -297,96 +286,94 @@ const Checkout = () => {
                 </Card>
 
                 {/* Delivery Address */}
-                {orderType === 'delivery' && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                        <MapPin className="h-5 w-5" />
-                        {t.checkout.deliveryAddress}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="area">{t.checkout.area} *</Label>
-                          <Input 
-                            id="area" 
-                            name="area"
-                            value={formData.area}
-                            onChange={handleInputChange}
-                            required 
-                            className={isRTL ? 'text-right' : ''}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="block">{t.checkout.block} *</Label>
-                          <Input 
-                            id="block" 
-                            name="block"
-                            value={formData.block}
-                            onChange={handleInputChange}
-                            required 
-                            className={isRTL ? 'text-right' : ''}
-                          />
-                        </div>
-                      </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <MapPin className="h-5 w-5" />
+                      {t.checkout.deliveryAddress}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="street">{t.checkout.address}</Label>
+                        <Label htmlFor="area">{t.checkout.area} *</Label>
                         <Input 
-                          id="street" 
-                          name="street"
-                          value={formData.street}
+                          id="area" 
+                          name="area"
+                          value={formData.area}
                           onChange={handleInputChange}
+                          required 
                           className={isRTL ? 'text-right' : ''}
                         />
-                      </div>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="building">{t.checkout.building} *</Label>
-                          <Input 
-                            id="building" 
-                            name="building"
-                            value={formData.building}
-                            onChange={handleInputChange}
-                            required 
-                            className={isRTL ? 'text-right' : ''}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="floor">{t.checkout.floor}</Label>
-                          <Input 
-                            id="floor" 
-                            name="floor"
-                            value={formData.floor}
-                            onChange={handleInputChange}
-                            className={isRTL ? 'text-right' : ''}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="apartment">{t.checkout.apartment}</Label>
-                          <Input 
-                            id="apartment" 
-                            name="apartment"
-                            value={formData.apartment}
-                            onChange={handleInputChange}
-                            className={isRTL ? 'text-right' : ''}
-                          />
-                        </div>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="additionalInfo">{t.checkout.additionalInfo}</Label>
-                        <Textarea 
-                          id="additionalInfo" 
-                          name="additionalInfo"
-                          value={formData.additionalInfo}
+                        <Label htmlFor="block">{t.checkout.block} *</Label>
+                        <Input 
+                          id="block" 
+                          name="block"
+                          value={formData.block}
                           onChange={handleInputChange}
-                          rows={2}
+                          required 
                           className={isRTL ? 'text-right' : ''}
                         />
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="street">{t.checkout.address}</Label>
+                      <Input 
+                        id="street" 
+                        name="street"
+                        value={formData.street}
+                        onChange={handleInputChange}
+                        className={isRTL ? 'text-right' : ''}
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="building">{t.checkout.building} *</Label>
+                        <Input 
+                          id="building" 
+                          name="building"
+                          value={formData.building}
+                          onChange={handleInputChange}
+                          required 
+                          className={isRTL ? 'text-right' : ''}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="floor">{t.checkout.floor}</Label>
+                        <Input 
+                          id="floor" 
+                          name="floor"
+                          value={formData.floor}
+                          onChange={handleInputChange}
+                          className={isRTL ? 'text-right' : ''}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="apartment">{t.checkout.apartment}</Label>
+                        <Input 
+                          id="apartment" 
+                          name="apartment"
+                          value={formData.apartment}
+                          onChange={handleInputChange}
+                          className={isRTL ? 'text-right' : ''}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="additionalInfo">{t.checkout.additionalInfo}</Label>
+                      <Textarea 
+                        id="additionalInfo" 
+                        name="additionalInfo"
+                        value={formData.additionalInfo}
+                        onChange={handleInputChange}
+                        rows={2}
+                        className={isRTL ? 'text-right' : ''}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
 
                 {/* Payment Method */}
                 <Card>
@@ -414,9 +401,7 @@ const Checkout = () => {
                         <RadioGroupItem value="cash" id="cash" />
                         <Banknote className={`h-6 w-6 ${paymentMethod === 'cash' ? 'text-primary' : 'text-muted-foreground'}`} />
                         <div className={isRTL ? 'text-right' : ''}>
-                          <p className="font-medium">
-                            {orderType === 'delivery' ? t.checkout.cashOnDelivery : t.checkout.cashOnPickup}
-                          </p>
+                          <p className="font-medium">{t.checkout.cashOnDelivery}</p>
                         </div>
                       </Label>
 
