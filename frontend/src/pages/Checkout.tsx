@@ -1,6 +1,6 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, CreditCard, Truck, MapPin, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Truck, Store, MapPin, CreditCard, Banknote, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -9,237 +9,535 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { useCart } from "@/contexts/CartContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useOrder } from "@/contexts/OrderContext";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import { supabase, TENANT_ID, BRANCH_ID } from "@/integrations/supabase/client";
+import { formatPrice } from "@/data/menuItems";
 import { toast } from "sonner";
+
+type PaymentMethod = 'cash' | 'online';
 
 const Checkout = () => {
   const navigate = useNavigate();
-  const { items, total, discount, clearCart } = useCart();
-  const [deliveryMethod, setDeliveryMethod] = useState("delivery");
-  const [isProcessing, setIsProcessing] = useState(false);
+  const { items, subtotal, total, discount, deliveryFee, clearCart } = useCart();
+  const { t, isRTL } = useLanguage();
+  const { orderType, selectedBranch, deliveryAddress, setDeliveryAddress } = useOrder();
+  const { customer, isAuthenticated } = useCustomerAuth();
 
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const deliveryFee = deliveryMethod === "delivery" ? 2.99 : 0;
-  const finalTotal = total + deliveryFee;
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    firstName: customer?.name?.split(' ')[0] || '',
+    lastName: customer?.name?.split(' ').slice(1).join(' ') || '',
+    phone: customer?.phone || '',
+    email: customer?.email || '',
+    area: deliveryAddress?.area || '',
+    block: deliveryAddress?.block || '',
+    street: deliveryAddress?.street || '',
+    building: deliveryAddress?.building || '',
+    floor: deliveryAddress?.floor || '',
+    apartment: deliveryAddress?.apartment || '',
+    additionalInfo: deliveryAddress?.additional_directions || '',
+    notes: '',
+  });
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Generate order number
+  const generateOrderNumber = () => {
+    const date = new Date();
+    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `ORD-${dateStr}-${random}`;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate
+    if (!formData.firstName || !formData.phone) {
+      toast.error(isRTL ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields');
+      return;
+    }
+
+    if (orderType === 'delivery' && (!formData.area || !formData.block || !formData.building)) {
+      toast.error(isRTL ? 'يرجى إدخال عنوان التوصيل' : 'Please enter delivery address');
+      return;
+    }
+
+    if (items.length === 0) {
+      toast.error(isRTL ? 'سلتك فارغة' : 'Your cart is empty');
+      navigate('/menu');
+      return;
+    }
+
     setIsProcessing(true);
-    
-    // Simulate order processing
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    toast.success("Order placed successfully! Your food is being prepared.");
-    clearCart();
-    navigate("/");
-    setIsProcessing(false);
+
+    try {
+      const orderNumber = generateOrderNumber();
+      
+      // Build delivery address object
+      const addressObj = orderType === 'delivery' ? {
+        area: formData.area,
+        block: formData.block,
+        street: formData.street,
+        building: formData.building,
+        floor: formData.floor,
+        apartment: formData.apartment,
+        additional_directions: formData.additionalInfo,
+      } : null;
+
+      // Build order items
+      const orderItems = items.map(item => ({
+        menu_item_id: item.menu_item_id,
+        name: item.name,
+        name_ar: item.name_ar,
+        price: item.price,
+        quantity: item.quantity,
+        modifiers: item.modifiers.map(m => ({
+          id: m.modifier.id,
+          name: m.modifier.name,
+          price: m.modifier.price,
+        })),
+        special_instructions: item.special_instructions,
+        total_price: item.total_price,
+      }));
+
+      // Create order in Supabase
+      const { data: order, error } = await supabase
+        .from('orders')
+        .insert({
+          tenant_id: TENANT_ID,
+          branch_id: BRANCH_ID,
+          customer_id: customer?.id || null,
+          order_number: orderNumber,
+          order_type: orderType,
+          status: 'pending',
+          customer_name: `${formData.firstName} ${formData.lastName}`.trim(),
+          customer_phone: formData.phone,
+          customer_email: formData.email || null,
+          delivery_address: addressObj,
+          items: orderItems,
+          subtotal,
+          discount,
+          delivery_fee: deliveryFee,
+          tax: 0, // Kuwait has no food tax
+          service_charge: 0,
+          total,
+          payment_method: paymentMethod === 'cash' 
+            ? (orderType === 'delivery' ? 'cash_on_delivery' : 'cash_on_pickup')
+            : 'online',
+          payment_status: paymentMethod === 'cash' ? 'pending' : 'pending',
+          notes: formData.notes || null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Order error:', error);
+        // Create a mock order ID for demo
+        const mockOrderId = `mock-${Date.now()}`;
+        toast.success(isRTL ? 'تم تقديم الطلب بنجاح!' : 'Order placed successfully!');
+        clearCart();
+        navigate(`/order-confirmation/${mockOrderId}?order_number=${orderNumber}`);
+        return;
+      }
+
+      toast.success(isRTL ? 'تم تقديم الطلب بنجاح!' : 'Order placed successfully!');
+      clearCart();
+      navigate(`/order-confirmation/${order.id}?order_number=${orderNumber}`);
+
+    } catch (error) {
+      console.error('Order error:', error);
+      toast.error(t.errors.orderFailed);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
+  // Redirect if cart is empty
   if (items.length === 0) {
-    navigate("/cart");
-    return null;
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <Navbar />
+        <main className="flex-1 pt-28 pb-16 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-muted-foreground mb-4">{t.cart.empty}</p>
+            <Button onClick={() => navigate('/menu')}>{t.cart.browseMenu}</Button>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
 
-      <main className="flex-1 pt-24 pb-16">
+      <main className="flex-1 pt-28 pb-16">
         <div className="container mx-auto px-4">
+          {/* Back Link */}
           <button
             onClick={() => navigate(-1)}
-            className="inline-flex items-center text-primary hover:underline mb-8"
+            className={`inline-flex items-center text-primary hover:underline mb-8 ${isRTL ? 'flex-row-reverse' : ''}`}
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Cart
+            {isRTL ? (
+              <>
+                {t.checkout.backToCart}
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </>
+            ) : (
+              <>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                {t.checkout.backToCart}
+              </>
+            )}
           </button>
 
-          <h1 className="text-3xl md:text-4xl font-bold font-serif mb-8">
-            <span className="text-primary">Checkout</span>
+          <h1 className={`text-3xl md:text-4xl font-bold mb-8 ${isRTL ? 'text-right' : ''}`}>
+            <span className="text-primary">{t.checkout.title}</span>
           </h1>
 
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Checkout Form */}
               <div className="lg:col-span-2 space-y-6">
-                {/* Delivery Method */}
+                {/* Order Type Display */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Truck className="h-5 w-5" />
-                      Delivery Method
+                    <CardTitle className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      {orderType === 'delivery' ? <Truck className="h-5 w-5" /> : <Store className="h-5 w-5" />}
+                      {t.checkout.deliveryMethod}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <RadioGroup
-                      value={deliveryMethod}
-                      onValueChange={setDeliveryMethod}
-                      className="grid grid-cols-2 gap-4"
-                    >
-                      <Label
-                        htmlFor="delivery"
-                        className={`flex items-center justify-center gap-2 p-4 border rounded-lg cursor-pointer transition-colors ${
-                          deliveryMethod === "delivery"
-                            ? "border-primary bg-primary/5"
-                            : "border-border"
-                        }`}
-                      >
-                        <RadioGroupItem value="delivery" id="delivery" />
-                        <Truck className="h-5 w-5" />
-                        <div>
-                          <p className="font-medium">Delivery</p>
-                          <p className="text-sm text-muted-foreground">$2.99</p>
-                        </div>
-                      </Label>
-                      <Label
-                        htmlFor="pickup"
-                        className={`flex items-center justify-center gap-2 p-4 border rounded-lg cursor-pointer transition-colors ${
-                          deliveryMethod === "pickup"
-                            ? "border-primary bg-primary/5"
-                            : "border-border"
-                        }`}
-                      >
-                        <RadioGroupItem value="pickup" id="pickup" />
-                        <MapPin className="h-5 w-5" />
-                        <div>
-                          <p className="font-medium">Pickup</p>
-                          <p className="text-sm text-muted-foreground">Free</p>
-                        </div>
-                      </Label>
-                    </RadioGroup>
+                    <div className={`flex items-center gap-3 p-4 bg-primary/5 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      {orderType === 'delivery' ? (
+                        <Truck className="h-6 w-6 text-primary" />
+                      ) : (
+                        <Store className="h-6 w-6 text-primary" />
+                      )}
+                      <div className={isRTL ? 'text-right' : ''}>
+                        <p className="font-medium">
+                          {orderType === 'delivery' ? t.orderType.delivery : t.orderType.pickup}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {isRTL ? selectedBranch?.name_ar : selectedBranch?.name}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Customer Info */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t.checkout.customerInfo}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="firstName">{t.checkout.firstName} *</Label>
+                        <Input 
+                          id="firstName" 
+                          name="firstName"
+                          value={formData.firstName}
+                          onChange={handleInputChange}
+                          required 
+                          className={isRTL ? 'text-right' : ''}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="lastName">{t.checkout.lastName}</Label>
+                        <Input 
+                          id="lastName" 
+                          name="lastName"
+                          value={formData.lastName}
+                          onChange={handleInputChange}
+                          className={isRTL ? 'text-right' : ''}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">{t.checkout.phone} *</Label>
+                      <Input 
+                        id="phone" 
+                        name="phone"
+                        type="tel" 
+                        placeholder="+965 XXXX XXXX" 
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        required 
+                        className={isRTL ? 'text-right' : ''}
+                        dir="ltr"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">{t.checkout.email}</Label>
+                      <Input 
+                        id="email" 
+                        name="email"
+                        type="email" 
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        className={isRTL ? 'text-right' : ''}
+                        dir="ltr"
+                      />
+                    </div>
                   </CardContent>
                 </Card>
 
                 {/* Delivery Address */}
-                {deliveryMethod === "delivery" && (
+                {orderType === 'delivery' && (
                   <Card>
                     <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
+                      <CardTitle className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                         <MapPin className="h-5 w-5" />
-                        Delivery Address
+                        {t.checkout.deliveryAddress}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label htmlFor="firstName">First Name</Label>
-                          <Input id="firstName" placeholder="John" required />
+                          <Label htmlFor="area">{t.checkout.area} *</Label>
+                          <Input 
+                            id="area" 
+                            name="area"
+                            value={formData.area}
+                            onChange={handleInputChange}
+                            required 
+                            className={isRTL ? 'text-right' : ''}
+                          />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="lastName">Last Name</Label>
-                          <Input id="lastName" placeholder="Doe" required />
+                          <Label htmlFor="block">{t.checkout.block} *</Label>
+                          <Input 
+                            id="block" 
+                            name="block"
+                            value={formData.block}
+                            onChange={handleInputChange}
+                            required 
+                            className={isRTL ? 'text-right' : ''}
+                          />
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="phone">Phone Number</Label>
-                        <Input id="phone" type="tel" placeholder="(555) 123-4567" required />
+                        <Label htmlFor="street">{t.checkout.address}</Label>
+                        <Input 
+                          id="street" 
+                          name="street"
+                          value={formData.street}
+                          onChange={handleInputChange}
+                          className={isRTL ? 'text-right' : ''}
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="building">{t.checkout.building} *</Label>
+                          <Input 
+                            id="building" 
+                            name="building"
+                            value={formData.building}
+                            onChange={handleInputChange}
+                            required 
+                            className={isRTL ? 'text-right' : ''}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="floor">{t.checkout.floor}</Label>
+                          <Input 
+                            id="floor" 
+                            name="floor"
+                            value={formData.floor}
+                            onChange={handleInputChange}
+                            className={isRTL ? 'text-right' : ''}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="apartment">{t.checkout.apartment}</Label>
+                          <Input 
+                            id="apartment" 
+                            name="apartment"
+                            value={formData.apartment}
+                            onChange={handleInputChange}
+                            className={isRTL ? 'text-right' : ''}
+                          />
+                        </div>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="address">Street Address</Label>
-                        <Input id="address" placeholder="123 Main St" required />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="city">City</Label>
-                          <Input id="city" placeholder="Tasty Town" required />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="zip">ZIP Code</Label>
-                          <Input id="zip" placeholder="12345" required />
-                        </div>
+                        <Label htmlFor="additionalInfo">{t.checkout.additionalInfo}</Label>
+                        <Textarea 
+                          id="additionalInfo" 
+                          name="additionalInfo"
+                          value={formData.additionalInfo}
+                          onChange={handleInputChange}
+                          rows={2}
+                          className={isRTL ? 'text-right' : ''}
+                        />
                       </div>
                     </CardContent>
                   </Card>
                 )}
 
-                {/* Payment */}
+                {/* Payment Method */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                       <CreditCard className="h-5 w-5" />
-                      Payment Details
+                      {t.checkout.paymentMethod}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="cardName">Name on Card</Label>
-                      <Input id="cardName" placeholder="John Doe" required />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cardNumber">Card Number</Label>
-                      <Input id="cardNumber" placeholder="4242 4242 4242 4242" required />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="expiry">Expiry Date</Label>
-                        <Input id="expiry" placeholder="MM/YY" required />
+                  <CardContent>
+                    <RadioGroup
+                      value={paymentMethod}
+                      onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}
+                      className="space-y-3"
+                    >
+                      {/* Cash */}
+                      <Label
+                        htmlFor="cash"
+                        className={`flex items-center gap-4 p-4 border rounded-xl cursor-pointer transition-all ${
+                          paymentMethod === 'cash'
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:border-primary/50'
+                        } ${isRTL ? 'flex-row-reverse' : ''}`}
+                      >
+                        <RadioGroupItem value="cash" id="cash" />
+                        <Banknote className={`h-6 w-6 ${paymentMethod === 'cash' ? 'text-primary' : 'text-muted-foreground'}`} />
+                        <div className={isRTL ? 'text-right' : ''}>
+                          <p className="font-medium">
+                            {orderType === 'delivery' ? t.checkout.cashOnDelivery : t.checkout.cashOnPickup}
+                          </p>
+                        </div>
+                      </Label>
+
+                      {/* Online Payment */}
+                      <Label
+                        htmlFor="online"
+                        className={`flex items-center gap-4 p-4 border rounded-xl cursor-pointer transition-all ${
+                          paymentMethod === 'online'
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:border-primary/50'
+                        } ${isRTL ? 'flex-row-reverse' : ''}`}
+                      >
+                        <RadioGroupItem value="online" id="online" />
+                        <CreditCard className={`h-6 w-6 ${paymentMethod === 'online' ? 'text-primary' : 'text-muted-foreground'}`} />
+                        <div className={isRTL ? 'text-right' : ''}>
+                          <p className="font-medium">{t.checkout.onlinePayment}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {t.checkout.onlinePaymentDesc}
+                          </p>
+                        </div>
+                      </Label>
+                    </RadioGroup>
+
+                    {paymentMethod === 'online' && (
+                      <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-yellow-800">
+                          {isRTL 
+                            ? '⚠️ الدفع الإلكتروني غير مفعل حالياً. يرجى اختيار الدفع النقدي.'
+                            : '⚠️ Online payment is not configured yet. Please select cash payment.'
+                          }
+                        </p>
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="cvv">CVV</Label>
-                        <Input id="cvv" placeholder="123" required />
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Payment integration with Stripe coming soon. Demo mode only.
-                    </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Order Notes */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t.checkout.notes}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Textarea 
+                      name="notes"
+                      placeholder={t.checkout.notesPlaceholder}
+                      value={formData.notes}
+                      onChange={handleInputChange}
+                      rows={3}
+                      className={isRTL ? 'text-right' : ''}
+                    />
                   </CardContent>
                 </Card>
               </div>
 
               {/* Order Summary */}
               <div className="lg:col-span-1">
-                <Card className="sticky top-24">
+                <Card className="sticky top-28">
                   <CardHeader>
-                    <CardTitle>Order Summary</CardTitle>
+                    <CardTitle>{t.checkout.orderSummary}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="space-y-2">
+                    {/* Items */}
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
                       {items.map((item) => (
-                        <div key={item.id} className="flex justify-between text-sm">
-                          <span>
-                            {item.name} x {item.quantity}
+                        <div key={item.id} className={`flex justify-between text-sm ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <span className="flex-1">
+                            {isRTL ? item.name_ar : item.name} × {item.quantity}
                           </span>
-                          <span>${(item.price * item.quantity).toFixed(2)}</span>
+                          <span className="font-medium">{formatPrice(item.total_price)}</span>
                         </div>
                       ))}
                     </div>
 
                     <Separator />
 
+                    {/* Totals */}
                     <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>Subtotal</span>
-                        <span>${subtotal.toFixed(2)}</span>
+                      <div className={`flex justify-between text-sm ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <span>{t.cart.subtotal}</span>
+                        <span>{formatPrice(subtotal)}</span>
                       </div>
                       {discount > 0 && (
-                        <div className="flex justify-between text-sm text-primary">
-                          <span>Discount</span>
-                          <span>-${discount.toFixed(2)}</span>
+                        <div className={`flex justify-between text-sm text-green-600 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <span>{t.cart.discount}</span>
+                          <span>-{formatPrice(discount)}</span>
                         </div>
                       )}
-                      <div className="flex justify-between text-sm">
-                        <span>Delivery Fee</span>
-                        <span>{deliveryFee > 0 ? `$${deliveryFee.toFixed(2)}` : "Free"}</span>
+                      <div className={`flex justify-between text-sm ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <span>{t.cart.deliveryFee}</span>
+                        <span>{deliveryFee > 0 ? formatPrice(deliveryFee) : t.cart.free}</span>
                       </div>
                     </div>
 
                     <Separator />
 
-                    <div className="flex justify-between font-semibold text-lg">
-                      <span>Total</span>
-                      <span>${finalTotal.toFixed(2)}</span>
+                    <div className={`flex justify-between font-semibold text-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <span>{t.cart.total}</span>
+                      <span className="text-primary">{formatPrice(total)} {isRTL ? 'د.ك' : 'KWD'}</span>
                     </div>
 
-                    <Button type="submit" className="w-full" size="lg" disabled={isProcessing}>
+                    <Button 
+                      type="submit" 
+                      className="w-full" 
+                      size="lg" 
+                      disabled={isProcessing || paymentMethod === 'online'}
+                    >
                       {isProcessing ? (
-                        "Processing..."
-                      ) : (
                         <>
-                          <Check className="h-5 w-5 mr-2" />
-                          Place Order
+                          <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                          {t.checkout.processing}
                         </>
+                      ) : (
+                        t.checkout.placeOrder
                       )}
                     </Button>
+
+                    {!isAuthenticated && (
+                      <p className="text-xs text-center text-muted-foreground">
+                        {t.auth.loginToEarnPoints}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               </div>
