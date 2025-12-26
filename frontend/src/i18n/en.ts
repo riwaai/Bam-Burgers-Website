@@ -293,7 +293,6 @@ export const en = {
   restaurant: {
     name: "Bam Burgers",
     tagline: "Fresh. Fast. Flavorful.",
-    address: "Beside Salwa Co-Op, Co-Op Compound, 103 St, 25409, Kuwait",
     phone: "+965 9474 5424",
     email: "hello@eatbam.me",
     hoursWeekday: "Daily: 11:00 AM - 1:00 AM",
