@@ -231,11 +231,10 @@ export const en = {
 
   // Footer
   footer: {
-    description: "Serving delicious burgers with quality ingredients in Kuwait. Fresh, fast, and flavorful!",
+    description: "Serving delicious burgers with quality ingredients in Kuwait. Fresh, fast, and flavorful! Delivery only.",
     quickLinks: "Quick Links",
     ourMenu: "Our Menu",
     aboutUs: "About Us",
-    contactUs: "Contact Us",
     loyaltyProgram: "Loyalty Program",
     contact: "Contact",
     hours: "Opening Hours",
