@@ -19,7 +19,6 @@ import Checkout from "./pages/Checkout";
 import OrderConfirmation from "./pages/OrderConfirmation";
 import OrderTracking from "./pages/OrderTracking";
 import About from "./pages/About";
-import Contact from "./pages/Contact";
 import Loyalty from "./pages/Loyalty";
 import CustomerLogin from "./pages/CustomerLogin";
 import NotFound from "./pages/NotFound";
