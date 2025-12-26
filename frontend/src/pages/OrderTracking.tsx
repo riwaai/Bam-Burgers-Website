@@ -1,19 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Check, Clock, ChefHat, Package, Truck, Home, Store, Phone } from "lucide-react";
+import { Check, Clock, ChefHat, Package, Truck, Home, Phone } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'picked_up';
+type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered';
 
 const OrderTracking = () => {
   const { orderId } = useParams();
   const { t, isRTL } = useLanguage();
   const [status, setStatus] = useState<OrderStatus>('preparing');
-  const [orderType] = useState<'delivery' | 'pickup'>('delivery');
 
   // Simulate status updates (in real app, this would be from Supabase realtime)
   useEffect(() => {
@@ -30,7 +29,7 @@ const OrderTracking = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const deliverySteps = [
+  const steps = [
     { id: 'confirmed', label: t.orderTracking.confirmed, icon: Check },
     { id: 'preparing', label: t.orderTracking.preparing, icon: ChefHat },
     { id: 'ready', label: t.orderTracking.ready, icon: Package },
@@ -38,14 +37,6 @@ const OrderTracking = () => {
     { id: 'delivered', label: t.orderTracking.delivered, icon: Home },
   ];
 
-  const pickupSteps = [
-    { id: 'confirmed', label: t.orderTracking.confirmed, icon: Check },
-    { id: 'preparing', label: t.orderTracking.preparing, icon: ChefHat },
-    { id: 'ready', label: t.orderTracking.ready, icon: Package },
-    { id: 'picked_up', label: t.orderTracking.pickedUp, icon: Store },
-  ];
-
-  const steps = orderType === 'delivery' ? deliverySteps : pickupSteps;
   const currentStepIndex = steps.findIndex(s => s.id === status);
 
   const getStepStatus = (index: number) => {
@@ -131,9 +122,9 @@ const OrderTracking = () => {
                 </div>
                 <div className={isRTL ? 'text-right' : ''}>
                   <p className="text-sm text-muted-foreground">
-                    {orderType === 'delivery' ? t.orderTracking.estimatedDelivery : t.orderTracking.estimatedPickup}
+                    {t.orderTracking.estimatedDelivery}
                   </p>
-                  <p className="text-xl font-semibold">15-20 {t.orderConfirmation.minutes}</p>
+                  <p className="text-xl font-semibold">30-45 {t.orderConfirmation.minutes}</p>
                 </div>
               </div>
             </CardContent>
