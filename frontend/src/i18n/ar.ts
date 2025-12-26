@@ -295,7 +295,6 @@ export const ar: Translations = {
   restaurant: {
     name: "بام برجرز",
     tagline: "طازج. سريع. مميز.",
-    address: "بجانب جمعية سلوى التعاونية، مجمع التعاونية، شارع 103، 25409، الكويت",
     phone: "+965 9474 5424",
     email: "hello@eatbam.me",
     hoursWeekday: "يومياً: 11:00 صباحاً - 1:00 صباحاً",
