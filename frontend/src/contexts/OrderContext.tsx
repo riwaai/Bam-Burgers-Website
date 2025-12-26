@@ -1,18 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-export type OrderType = 'pickup' | 'delivery';
+export type OrderType = 'delivery';
 
 export interface Branch {
   id: string;
   name: string;
   name_ar?: string;
-  address: string;
-  address_ar?: string;
   phone: string;
   is_open: boolean;
   opening_hours: string;
-  latitude?: number;
-  longitude?: number;
 }
 
 export interface DeliveryAddress {
