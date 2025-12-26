@@ -1,36 +1,80 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, ShoppingCart, User } from "lucide-react";
+import { Menu, X, ShoppingCart, User, Globe, MapPin, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useCart } from "@/contexts/CartContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useOrder } from "@/contexts/OrderContext";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
-  const { items } = useCart();
-  const cartItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  const { itemCount } = useCart();
+  const { language, setLanguage, t, isRTL } = useLanguage();
+  const { selectedBranch, orderType, setShowOrderTypeModal } = useOrder();
+  const { isAuthenticated, customer, signOut } = useCustomerAuth();
 
   const navLinks = [
-    { name: "Home", path: "/" },
-    { name: "Menu", path: "/menu" },
-    { name: "About", path: "/about" },
-    { name: "Contact", path: "/contact" },
+    { name: t.nav.home, path: "/" },
+    { name: t.nav.menu, path: "/menu" },
+    { name: t.nav.about, path: "/about" },
+    { name: t.nav.contact, path: "/contact" },
   ];
 
   const isActive = (path: string) => location.pathname === path;
 
+  const toggleLanguage = () => {
+    setLanguage(language === 'en' ? 'ar' : 'en');
+  };
+
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-b border-border">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-b border-border shadow-sm">
       <div className="container mx-auto px-4">
+        {/* Top bar with branch info */}
+        <div className="flex items-center justify-between py-2 text-xs border-b border-border/50">
+          <button 
+            onClick={() => setShowOrderTypeModal(true)}
+            className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors"
+          >
+            <MapPin className="h-3 w-3" />
+            <span className="hidden sm:inline">
+              {isRTL ? selectedBranch?.name_ar : selectedBranch?.name}
+            </span>
+            <span className="sm:hidden">{selectedBranch?.name?.split(' - ')[1] || 'Salwa'}</span>
+            <span className="text-primary font-medium">
+              • {orderType === 'delivery' ? (isRTL ? 'توصيل' : 'Delivery') : (isRTL ? 'استلام' : 'Pickup')}
+            </span>
+            <ChevronDown className="h-3 w-3" />
+          </button>
+          
+          <button
+            onClick={toggleLanguage}
+            className="flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors"
+          >
+            <Globe className="h-3 w-3" />
+            <span>{language === 'en' ? 'العربية' : 'English'}</span>
+          </button>
+        </div>
+
+        {/* Main navbar */}
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
-            <span className="text-2xl font-bold text-primary font-serif">Bam Burgers</span>
+            <span className="text-2xl font-bold text-primary font-sans tracking-tight">
+              {t.restaurant.name}
+            </span>
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden md:flex items-center gap-8">
             {navLinks.map((link) => (
               <Link
                 key={link.path}
@@ -45,18 +89,51 @@ const Navbar = () => {
           </div>
 
           {/* Right side actions */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-2">
+            {/* Cart */}
             <Link to="/cart" className="relative">
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" className="relative">
                 <ShoppingCart className="h-5 w-5" />
-                {cartItemCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
-                    {cartItemCount}
+                {itemCount > 0 && (
+                  <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-primary">
+                    {itemCount > 99 ? '99+' : itemCount}
                   </Badge>
                 )}
               </Button>
             </Link>
-            {/* Admin link hidden from public view - access via /admin/login */}
+
+            {/* User menu */}
+            {isAuthenticated ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <User className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align={isRTL ? "start" : "end"} className="w-48">
+                  <div className="px-2 py-1.5 text-sm font-medium">
+                    {customer?.name || customer?.email}
+                  </div>
+                  <DropdownMenuItem asChild>
+                    <Link to="/loyalty" className="cursor-pointer">
+                      {t.nav.loyalty}
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => signOut()} className="cursor-pointer text-destructive">
+                    {t.nav.logout}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Link to="/login">
+                <Button variant="outline" size="sm" className="hidden sm:flex">
+                  {t.nav.login}
+                </Button>
+                <Button variant="ghost" size="icon" className="sm:hidden">
+                  <User className="h-5 w-5" />
+                </Button>
+              </Link>
+            )}
 
             {/* Mobile menu button */}
             <Button
@@ -72,21 +149,29 @@ const Navbar = () => {
 
         {/* Mobile Navigation */}
         {isOpen && (
-          <div className="md:hidden py-4 border-t border-border">
-            <div className="flex flex-col space-y-3">
+          <div className="md:hidden py-4 border-t border-border animate-fade-in">
+            <div className="flex flex-col space-y-1">
               {navLinks.map((link) => (
                 <Link
                   key={link.path}
                   to={link.path}
                   onClick={() => setIsOpen(false)}
-                  className={`text-sm font-medium transition-colors hover:text-primary px-2 py-1 ${
-                    isActive(link.path) ? "text-primary" : "text-foreground"
+                  className={`text-sm font-medium transition-colors hover:text-primary px-3 py-2 rounded-lg ${
+                    isActive(link.path) ? "text-primary bg-primary/5" : "text-foreground"
                   }`}
                 >
                   {link.name}
                 </Link>
               ))}
-              {/* Admin link hidden from public view */}
+              {!isAuthenticated && (
+                <Link
+                  to="/login"
+                  onClick={() => setIsOpen(false)}
+                  className="text-sm font-medium text-primary px-3 py-2"
+                >
+                  {t.nav.login}
+                </Link>
+              )}
             </div>
           </div>
         )}
