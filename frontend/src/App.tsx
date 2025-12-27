@@ -11,6 +11,9 @@ import { CartProvider } from "@/contexts/CartContext";
 import { OrderProvider } from "@/contexts/OrderContext";
 import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
 
+// Components
+import ScrollToTop from "@/components/ScrollToTop";
+
 // Customer Pages
 import Index from "./pages/Index";
 import Menu from "./pages/Menu";
