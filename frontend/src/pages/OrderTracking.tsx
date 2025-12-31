@@ -1,40 +1,49 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { Check, Clock, ChefHat, Package, Truck, Home, Phone } from "lucide-react";
+import { useParams, useSearchParams, Link } from "react-router-dom";
+import { Check, Clock, ChefHat, Package, Truck, Home, Phone, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useOrderTracking, useOrderByNumber } from "@/hooks/useOrders";
 
-type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered';
+type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'cancelled';
+
+// Map backend status to display status
+const statusMapping: Record<string, OrderStatus> = {
+  'pending': 'pending',
+  'accepted': 'accepted',
+  'preparing': 'preparing',
+  'ready': 'ready',
+  'out_for_delivery': 'out_for_delivery',
+  'delivered': 'delivered',
+  'cancelled': 'cancelled',
+};
 
 const OrderTracking = () => {
   const { orderId } = useParams();
+  const [searchParams] = useSearchParams();
+  const orderNumber = searchParams.get('order_number');
   const { t, isRTL } = useLanguage();
-  const [status, setStatus] = useState<OrderStatus>('preparing');
 
-  // Simulate status updates (in real app, this would be from Supabase realtime)
-  useEffect(() => {
-    const statuses: OrderStatus[] = ['confirmed', 'preparing', 'ready'];
-    let currentIndex = 0;
+  // Try to get order by ID first, then by order number
+  const { order: orderById, loading: loadingById } = useOrderTracking(orderId);
+  const { order: orderByNum, loading: loadingByNum } = useOrderByNumber(orderNumber || undefined);
 
-    const interval = setInterval(() => {
-      if (currentIndex < statuses.length) {
-        setStatus(statuses[currentIndex]);
-        currentIndex++;
-      }
-    }, 5000);
+  const order = orderById || orderByNum;
+  const loading = loadingById || loadingByNum;
+  const status = order ? (statusMapping[order.status] || 'pending') : 'pending';
 
-    return () => clearInterval(interval);
-  }, []);
-
+  // Order status flow as per user request:
+  // order placed -> order accepted -> freshly preparing -> ready for delivery -> out for delivery
   const steps = [
-    { id: 'confirmed', label: t.orderTracking.confirmed, icon: Check },
-    { id: 'preparing', label: t.orderTracking.preparing, icon: ChefHat },
-    { id: 'ready', label: t.orderTracking.ready, icon: Package },
-    { id: 'out_for_delivery', label: t.orderTracking.onTheWay, icon: Truck },
-    { id: 'delivered', label: t.orderTracking.delivered, icon: Home },
+    { id: 'pending', label: isRTL ? 'تم استلام الطلب' : 'Order Placed', icon: Check },
+    { id: 'accepted', label: isRTL ? 'تم قبول الطلب' : 'Order Accepted', icon: Check },
+    { id: 'preparing', label: isRTL ? 'جاري التحضير' : 'Freshly Preparing', icon: ChefHat },
+    { id: 'ready', label: isRTL ? 'جاهز للتوصيل' : 'Ready for Delivery', icon: Package },
+    { id: 'out_for_delivery', label: isRTL ? 'في الطريق إليك' : 'Out for Delivery', icon: Truck },
+    { id: 'delivered', label: isRTL ? 'تم التوصيل' : 'Delivered', icon: Home },
   ];
 
   const currentStepIndex = steps.findIndex(s => s.id === status);
@@ -45,15 +54,54 @@ const OrderTracking = () => {
     return 'upcoming';
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <Navbar />
+        <main className="flex-1 pt-28 pb-16 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!order && !loading) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <Navbar />
+        <main className="flex-1 pt-28 pb-16 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-muted-foreground mb-4">
+              {isRTL ? 'لم يتم العثور على الطلب' : 'Order not found'}
+            </p>
+            <Link to="/menu">
+              <Button>{isRTL ? 'العودة للقائمة' : 'Back to Menu'}</Button>
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
 
       <main className="flex-1 pt-28 pb-16">
         <div className="container mx-auto px-4 max-w-2xl">
-          <h1 className={`text-3xl font-bold mb-8 ${isRTL ? 'text-right' : ''}`}>
+          <h1 className={`text-3xl font-bold mb-4 ${isRTL ? 'text-right' : ''}`}>
             <span className="text-primary">{t.orderTracking.title}</span>
           </h1>
+
+          {/* Order Number */}
+          {order && (
+            <p className={`text-muted-foreground mb-8 ${isRTL ? 'text-right' : ''}`}>
+              {isRTL ? 'رقم الطلب: ' : 'Order #: '}
+              <span className="font-semibold text-foreground">{order.order_number}</span>
+            </p>
+          )}
 
           {/* Status Timeline */}
           <Card className="mb-6">
