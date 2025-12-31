@@ -6,16 +6,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCart, CartItemModifier } from "@/contexts/CartContext";
-import { MenuItem, ModifierGroup, Modifier, getModifierGroupsForItem, formatPrice } from "@/data/menuItems";
+import { MenuItem, ModifierGroup, Modifier, formatPrice } from "@/hooks/useSupabaseMenu";
 
 interface ItemDetailModalProps {
   item: MenuItem;
@@ -24,24 +21,25 @@ interface ItemDetailModalProps {
 }
 
 const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
-  const { t, language, isRTL } = useLanguage();
+  const { t, isRTL } = useLanguage();
   const { addItem } = useCart();
   
   const [quantity, setQuantity] = useState(1);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, string[]>>({});
   const [specialInstructions, setSpecialInstructions] = useState("");
   
-  const modifierGroups = getModifierGroupsForItem(item);
-  const displayName = isRTL ? item.name_ar : item.name;
-  const displayDescription = isRTL ? item.description_ar : item.description;
+  const modifierGroups = item.modifier_groups || [];
+  const displayName = isRTL ? item.name_ar : item.name_en;
+  const displayDescription = isRTL ? item.description_ar : item.description_en;
+  const imageUrl = item.image_url || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500';
 
   // Initialize default modifiers
   useEffect(() => {
     if (isOpen) {
       const defaults: Record<string, string[]> = {};
       modifierGroups.forEach(group => {
-        const defaultMods = group.modifiers
-          .filter(m => m.is_default && m.is_available)
+        const defaultMods = (group.modifiers || [])
+          .filter(m => m.default_selected && m.status === 'active')
           .map(m => m.id);
         if (defaultMods.length > 0) {
           defaults[group.id] = defaultMods;
@@ -55,12 +53,12 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
 
   // Calculate total price
   const calculateTotal = (): number => {
-    let total = item.price;
+    let total = item.base_price;
     
     modifierGroups.forEach(group => {
       const selected = selectedModifiers[group.id] || [];
       selected.forEach(modId => {
-        const modifier = group.modifiers.find(m => m.id === modId);
+        const modifier = (group.modifiers || []).find(m => m.id === modId);
         if (modifier) {
           total += modifier.price;
         }
@@ -75,14 +73,14 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
     setSelectedModifiers(prev => {
       const current = prev[group.id] || [];
       
-      if (group.max_selections === 1) {
+      if (group.max_select === 1) {
         // Radio button behavior
         return { ...prev, [group.id]: checked ? [modifierId] : [] };
       }
       
       if (checked) {
         // Check max selections
-        if (current.length >= group.max_selections) {
+        if (current.length >= group.max_select) {
           return prev;
         }
         return { ...prev, [group.id]: [...current, modifierId] };
@@ -95,9 +93,9 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
   // Validate required modifiers
   const isValid = (): boolean => {
     return modifierGroups.every(group => {
-      if (!group.is_required) return true;
+      if (!group.required) return true;
       const selected = selectedModifiers[group.id] || [];
-      return selected.length >= group.min_selections;
+      return selected.length >= group.min_select;
     });
   };
 
@@ -110,16 +108,16 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
     modifierGroups.forEach(group => {
       const selected = selectedModifiers[group.id] || [];
       selected.forEach(modId => {
-        const modifier = group.modifiers.find(m => m.id === modId);
+        const modifier = (group.modifiers || []).find(m => m.id === modId);
         if (modifier) {
           cartModifiers.push({
             modifier: {
               id: modifier.id,
-              name: modifier.name,
+              name: modifier.name_en,
               name_ar: modifier.name_ar,
               price: modifier.price,
               group_id: group.id,
-              group_name: group.name,
+              group_name: group.name_en,
             },
             quantity: 1,
           });
@@ -128,15 +126,15 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
     });
 
     const modifiersTotal = cartModifiers.reduce((sum, mod) => sum + mod.modifier.price, 0);
-    const totalPrice = (item.price + modifiersTotal) * quantity;
+    const totalPrice = (item.base_price + modifiersTotal) * quantity;
 
     addItem({
       menu_item_id: item.id,
-      name: item.name,
+      name: item.name_en,
       name_ar: item.name_ar,
-      price: item.price,
+      price: item.base_price,
       quantity,
-      image: item.image,
+      image: imageUrl,
       modifiers: cartModifiers,
       special_instructions: specialInstructions || undefined,
       total_price: totalPrice,
@@ -152,9 +150,12 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
           {/* Image */}
           <div className="relative h-48 overflow-hidden">
             <img
-              src={item.image}
+              src={imageUrl}
               alt={displayName}
               className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500';
+              }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
             <button
@@ -170,10 +171,10 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
             {/* Header */}
             <div className="mb-4">
               <h2 className="text-xl font-bold">{displayName}</h2>
-              <p className="text-muted-foreground text-sm mt-1">{displayDescription}</p>
+              <p className="text-muted-foreground text-sm mt-1">{displayDescription || ''}</p>
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-xl font-bold text-primary">
-                  {formatPrice(item.price)} {isRTL ? 'د.ك' : 'KWD'}
+                  {formatPrice(item.base_price)} {isRTL ? 'د.ك' : 'KWD'}
                 </span>
                 {item.calories && (
                   <Badge variant="outline" className="text-xs">
@@ -188,22 +189,22 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
               <div key={group.id} className="mb-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-semibold">
-                    {isRTL ? group.name_ar : group.name}
+                    {isRTL ? group.name_ar : group.name_en}
                   </h3>
-                  <Badge variant={group.is_required ? "default" : "outline"} className="text-xs">
-                    {group.is_required ? t.itemModal.required : t.itemModal.optional}
-                    {group.max_selections > 1 && ` (max ${group.max_selections})`}
+                  <Badge variant={group.required ? "default" : "outline"} className="text-xs">
+                    {group.required ? t.itemModal.required : t.itemModal.optional}
+                    {group.max_select > 1 && ` (max ${group.max_select})`}
                   </Badge>
                 </div>
 
-                {group.max_selections === 1 ? (
+                {group.max_select === 1 ? (
                   // Radio group for single selection
                   <RadioGroup
                     value={(selectedModifiers[group.id] || [])[0] || ''}
                     onValueChange={(value) => handleModifierChange(group, value, true)}
                     className="space-y-2"
                   >
-                    {group.modifiers.filter(m => m.is_available).map((modifier) => (
+                    {(group.modifiers || []).filter(m => m.status === 'active').map((modifier) => (
                       <Label
                         key={modifier.id}
                         htmlFor={modifier.id}
@@ -215,7 +216,7 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
                       >
                         <div className="flex items-center gap-3">
                           <RadioGroupItem value={modifier.id} id={modifier.id} />
-                          <span>{isRTL ? modifier.name_ar : modifier.name}</span>
+                          <span>{isRTL ? modifier.name_ar : modifier.name_en}</span>
                         </div>
                         {modifier.price > 0 && (
                           <span className="text-primary font-medium">
@@ -228,10 +229,10 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
                 ) : (
                   // Checkboxes for multiple selection
                   <div className="space-y-2">
-                    {group.modifiers.filter(m => m.is_available).map((modifier) => {
+                    {(group.modifiers || []).filter(m => m.status === 'active').map((modifier) => {
                       const isSelected = (selectedModifiers[group.id] || []).includes(modifier.id);
                       const isDisabled = !isSelected && 
-                        (selectedModifiers[group.id] || []).length >= group.max_selections;
+                        (selectedModifiers[group.id] || []).length >= group.max_select;
                       
                       return (
                         <Label
@@ -254,7 +255,7 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
                                 handleModifierChange(group, modifier.id, checked as boolean)
                               }
                             />
-                            <span>{isRTL ? modifier.name_ar : modifier.name}</span>
+                            <span>{isRTL ? modifier.name_ar : modifier.name_en}</span>
                           </div>
                           {modifier.price > 0 ? (
                             <span className="text-primary font-medium">
@@ -322,7 +323,7 @@ const ItemDetailModal = ({ item, isOpen, onClose }: ItemDetailModalProps) => {
               className="w-full"
               size="lg"
               onClick={handleAddToCart}
-              disabled={!isValid() || !item.is_available}
+              disabled={!isValid() || item.status !== 'active'}
             >
               <Plus className="h-5 w-5 mr-2" />
               {t.itemModal.addToCartBtn}
