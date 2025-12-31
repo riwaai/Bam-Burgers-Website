@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Truck, MapPin, CreditCard, Banknote, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Truck, MapPin, CreditCard, Banknote, Loader2, Store } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrder } from "@/contexts/OrderContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { supabase, TENANT_ID, BRANCH_ID } from "@/integrations/supabase/client";
-import { formatPrice } from "@/data/menuItems";
+import { formatPrice } from "@/hooks/useSupabaseMenu";
 import { toast } from "sonner";
 
 type PaymentMethod = 'cash' | 'online';
