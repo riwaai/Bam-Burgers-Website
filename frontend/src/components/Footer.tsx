@@ -1,10 +1,14 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Phone, Clock, Facebook, Instagram, Twitter } from "lucide-react";
+import { Phone, Clock, Facebook, Instagram, Twitter, MapPin } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 // Logo URL
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_bam-delivery/artifacts/gxx028af_Logo.png";
+
+// Restaurant Address
+const RESTAURANT_ADDRESS = "Kitchen Park Salwa - 834C+HH Rumaithiya, Kuwait";
+const RESTAURANT_ADDRESS_AR = "كيتشن بارك سلوى - 834C+HH الرميثية، الكويت";
 
 const Footer = () => {
   const { t, isRTL } = useLanguage();
@@ -12,7 +16,7 @@ const Footer = () => {
   return (
     <footer className="bg-foreground text-background">
       <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand */}
           <div className="space-y-4">
             <Link to="/" className="inline-block">
@@ -58,6 +62,17 @@ const Footer = () => {
                 </Link>
               </li>
             </ul>
+          </div>
+
+          {/* Location */}
+          <div className="space-y-4">
+            <h4 className="text-lg font-semibold">{isRTL ? 'موقعنا' : 'Our Location'}</h4>
+            <div className="flex items-start gap-3">
+              <MapPin className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+              <p className="text-sm opacity-80">
+                {isRTL ? RESTAURANT_ADDRESS_AR : RESTAURANT_ADDRESS}
+              </p>
+            </div>
           </div>
 
           {/* Contact & Hours */}
