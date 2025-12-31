@@ -207,21 +207,38 @@ const Checkout = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Checkout Form */}
               <div className="lg:col-span-2 space-y-6">
-                {/* Delivery Info */}
+                {/* Order Type Info */}
                 <Card>
                   <CardHeader>
                     <CardTitle className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <Truck className="h-5 w-5" />
-                      {isRTL ? 'توصيل للمنزل' : 'Home Delivery'}
+                      {isPickup ? <Store className="h-5 w-5" /> : <Truck className="h-5 w-5" />}
+                      {isPickup 
+                        ? (isRTL ? 'استلام من الفرع' : 'Pickup from Branch')
+                        : (isRTL ? 'توصيل للمنزل' : 'Home Delivery')
+                      }
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className={`flex items-center gap-3 p-4 bg-primary/5 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <Truck className="h-6 w-6 text-primary" />
-                      <p className="font-medium">
-                        {isRTL ? 'سنوصل طلبك إلى باب منزلك' : "We'll deliver your order to your doorstep"}
-                      </p>
-                    </div>
+                    {isPickup ? (
+                      <div className={`flex items-start gap-3 p-4 bg-primary/5 rounded-lg ${isRTL ? 'flex-row-reverse text-right' : ''}`}>
+                        <MapPin className="h-6 w-6 text-primary mt-1 flex-shrink-0" />
+                        <div>
+                          <p className="font-medium mb-1">
+                            {isRTL ? selectedBranch?.name_ar : selectedBranch?.name}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {isRTL ? selectedBranch?.address_ar : selectedBranch?.address}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={`flex items-center gap-3 p-4 bg-primary/5 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <Truck className="h-6 w-6 text-primary" />
+                        <p className="font-medium">
+                          {isRTL ? 'سنوصل طلبك إلى باب منزلك' : "We'll deliver your order to your doorstep"}
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
