@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-export type OrderType = 'delivery';
+export type OrderType = 'pickup' | 'delivery';
 
 export interface Branch {
   id: string;
   name: string;
   name_ar?: string;
+  address: string;
+  address_ar?: string;
   phone: string;
   is_open: boolean;
   opening_hours: string;
@@ -19,8 +21,6 @@ export interface DeliveryAddress {
   floor?: string;
   apartment?: string;
   additional_directions?: string;
-  latitude?: number;
-  longitude?: number;
 }
 
 interface OrderContextType {
@@ -38,32 +38,28 @@ interface OrderContextType {
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
-// Default branch - Bam Burgers (Delivery Only Kitchen)
+// Default branch - Bam Burgers Kitchen Park Salwa
 const DEFAULT_BRANCH: Branch = {
   id: '3f9570b2-24d2-4f2d-81d7-25c6b35da76b',
-  name: 'Bam Burgers',
-  name_ar: 'بام برجرز',
+  name: 'Kitchen Park Salwa',
+  name_ar: 'كيتشن بارك سلوى',
+  address: '834C+HH Rumaithiya, Kuwait',
+  address_ar: '834C+HH الرميثية، الكويت',
   phone: '+965 9474 5424',
   is_open: true,
   opening_hours: 'Daily 11:00 AM - 1:00 AM',
 };
 
 const ORDER_TYPE_KEY = 'bam-order-type';
-const BRANCH_KEY = 'bam-branch';
 const ADDRESS_KEY = 'bam-delivery-address';
 
 export const OrderProvider = ({ children }: { children: ReactNode }) => {
-  // Always delivery for kitchen-only restaurant
-  const [orderType] = useState<OrderType>('delivery');
-
-  const [selectedBranch, setSelectedBranchState] = useState<Branch | null>(() => {
-    try {
-      const stored = localStorage.getItem(BRANCH_KEY);
-      return stored ? JSON.parse(stored) : DEFAULT_BRANCH;
-    } catch {
-      return DEFAULT_BRANCH;
-    }
+  const [orderType, setOrderTypeState] = useState<OrderType>(() => {
+    const stored = localStorage.getItem(ORDER_TYPE_KEY);
+    return (stored === 'pickup' || stored === 'delivery') ? stored : 'delivery';
   });
+
+  const [selectedBranch] = useState<Branch>(DEFAULT_BRANCH);
 
   const [deliveryAddress, setDeliveryAddressState] = useState<DeliveryAddress | null>(() => {
     try {
@@ -78,12 +74,12 @@ export const OrderProvider = ({ children }: { children: ReactNode }) => {
   const [showBranchModal, setShowBranchModal] = useState(false);
 
   const setOrderType = (type: OrderType) => {
-    // Kitchen only - always delivery
+    setOrderTypeState(type);
+    localStorage.setItem(ORDER_TYPE_KEY, type);
   };
 
   const setSelectedBranch = (branch: Branch) => {
-    setSelectedBranchState(branch);
-    localStorage.setItem(BRANCH_KEY, JSON.stringify(branch));
+    // Single branch for now
   };
 
   const setDeliveryAddress = (address: DeliveryAddress | null) => {
