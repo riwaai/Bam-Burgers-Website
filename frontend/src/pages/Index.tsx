@@ -1,21 +1,32 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Clock, Star, Truck, Flame, Gift, Phone } from "lucide-react";
+import { ArrowRight, Clock, Star, Truck, Flame, Gift, Phone, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import MenuCard from "@/components/MenuCard";
+import MenuItemCard from "@/components/MenuItemCard";
+import OrderTypeModal from "@/components/OrderTypeModal";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { menuItems } from "@/data/menuItems";
+import { useOrder } from "@/contexts/OrderContext";
+import { usePopularItems } from "@/hooks/useSupabaseMenu";
 
 // Logo URL
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_bam-delivery/artifacts/gxx028af_Logo.png";
 
 const Index = () => {
   const { t, isRTL } = useLanguage();
+  const { showOrderTypeModal, setShowOrderTypeModal } = useOrder();
+  const { items: popularItems, loading } = usePopularItems();
 
-  const popularItems = menuItems.filter((item) => item.is_popular).slice(0, 4);
+  // Show order type modal on first visit
+  useEffect(() => {
+    const hasSeenModal = localStorage.getItem('bam-seen-order-modal');
+    if (!hasSeenModal) {
+      setShowOrderTypeModal(true);
+      localStorage.setItem('bam-seen-order-modal', 'true');
+    }
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -41,9 +52,7 @@ const Index = () => {
               className="h-20 md:h-28 w-auto mb-4"
             />
             <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight">
-              {t.hero.title}
-              <br />
-              <span className="text-primary">{t.hero.titleHighlight}</span>
+              <span className="text-primary">OG BURGER MEAL</span>
             </h1>
             <p className="text-lg md:text-xl text-white/80 max-w-lg">
               {t.hero.subtitle}
@@ -76,7 +85,7 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Popular Items - NOW FIRST */}
+      {/* Popular Items - FROM SUPABASE */}
       <section className="py-16">
         <div className="container mx-auto px-4">
           <div className={`mb-12 ${isRTL ? 'text-right' : 'text-center'}`}>
@@ -99,11 +108,17 @@ const Index = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {popularItems.map((item) => (
-              <MenuCard key={item.id} item={item} />
-            ))}
-          </div>
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {popularItems.map((item) => (
+                <MenuItemCard key={item.id} item={item} />
+              ))}
+            </div>
+          )}
 
           <div className="text-center mt-10">
             <Link to="/menu">
@@ -116,7 +131,7 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Features - MOVED AFTER POPULAR ITEMS */}
+      {/* Features */}
       <section className="py-16 bg-card">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -231,6 +246,12 @@ const Index = () => {
       </section>
 
       <Footer />
+
+      {/* Order Type Modal */}
+      <OrderTypeModal 
+        isOpen={showOrderTypeModal} 
+        onClose={() => setShowOrderTypeModal(false)} 
+      />
     </div>
   );
 };
